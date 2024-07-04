@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stripe Payment Example</title>
+  <script src="https://js.stripe.com/v3/"></script>
+</head>
+<body>
+  <h1>Payment Form</h1>
+  <form id="payment-form">
+    <div id="card-element"></div> <!-- Card element will be mounted here -->
+    <button type="submit" id="submit">Pay</button>
+  </form>
+
+  <script>
+    var stripe = Stripe('pk_test_51R89YBCDPAHogqUvxb6igZKvsVRw3CbdG5JWVediqiqGRKHE0zbyCtWfwM6CsvFyEsrHqBo194aqpzXICHDaUzU600bBJhOU3e');  // Replace with your Stripe publishable key
+    var elements = stripe.elements();
+    var card = elements.create('card');
+    card.mount('#card-element');
+
+    var form = document.getElementById('payment-form');
+
+    form.addEventListener('submit', function(event) {
+      event.preventDefault();
+
+      // Create a PaymentIntent
+      fetch('http://127.0.0.1:8000/pay/stripe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          amount: 50.0,
+          currency: 'usd'
+        })
+      })
+      .then(function(response) {
+        return response.json();
+      })
+      .then(function(data) {
+        var clientSecret = data.client_secret;
+        var paymentIntentId = data.payment_intent_id;
+
+        // Confirm the PaymentIntent with the payment method
+        stripe.confirmCardPayment(clientSecret, {
+          payment_method: {
+            card: card
+          }
+        })
+        .then(function(result) {
+          if (result.error) {
+            console.log(result.error.message);  // Show error to the user
+          } else if (result.paymentIntent.status === 'succeeded') {
+            console.log("Payment succeeded!");
+            alert('Payment succeeded!');
+
+            // Send payment confirmation to backend for logging
+            fetch('http://127.0.0.1:8000/pay/stripe/confirm', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                payment_intent_id: paymentIntentId,
+                payment_method_id: result.paymentIntent.payment_method
+              })
+            }).then(function(response) {
+              return response.json();
+            }).then(function(data) {
+              console.log(data);
+            }).catch(function(error) {
+              console.error('Error confirming payment:', error);
+            });
+          }
+        });
+      })
+      .catch(function(error) {
+        console.error('Error:', error);
+      });
+    });
+  </script>
+</body>
+</html>
