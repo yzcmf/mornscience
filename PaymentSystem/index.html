@@ -23,7 +23,7 @@
 
     form.addEventListener('submit', function(event) {
       event.preventDefault();
-
+      console.log("hello");
       // Create a PaymentIntent
       fetch('http://127.0.0.1:8000/pay/stripe', {
         method: 'POST',
@@ -32,28 +32,42 @@
         },
         body: JSON.stringify({
           amount: 50.0,
-          currency: 'usd'
+          currency: "USD",
+          provider: "Stripe",
+          payment_intent_id: "pi_3R8EIzCDPAHogqUv1a12a7w5",
+          payment_method: 'pm_card_visa'
         })
       })
       .then(function(response) {
         return response.json();
       })
       .then(function(data) {
+        console.log("Response Data: ", data);
         var clientSecret = data.client_secret;
         var paymentIntentId = data.payment_intent_id;
 
         // Confirm the PaymentIntent with the payment method
         stripe.confirmCardPayment(clientSecret, {
-          payment_method: {
-            card: card
-          }
+          payment_method: 'pm_card_visa'
+<!--          {-->
+<!--            card: {-->
+<!--                "number": "4242424242424242",-->
+<!--                "exp_month": "12",-->
+<!--                "exp_year": "2025",-->
+<!--                "cvc": "123"-->
+<!--            }-->
+<!--          }-->
         })
         .then(function(result) {
+          console.log("result Data: ", result);
           if (result.error) {
             console.log(result.error.message);  // Show error to the user
           } else if (result.paymentIntent.status === 'succeeded') {
             console.log("Payment succeeded!");
             alert('Payment succeeded!');
+
+<!--            console.log("paymentIntentId: " + paymentIntentId);-->
+<!--            console.log("payment_method_id: " +  result.paymentIntent.payment_method);-->
 
             // Send payment confirmation to backend for logging
             fetch('http://127.0.0.1:8000/pay/stripe/confirm', {
@@ -66,6 +80,7 @@
                 payment_method_id: result.paymentIntent.payment_method
               })
             }).then(function(response) {
+              console.log("response response: ", response.json());
               return response.json();
             }).then(function(data) {
               console.log(data);

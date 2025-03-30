@@ -8,7 +8,26 @@ from sqlalchemy.orm import sessionmaker, Session
 import aiohttp
 import os
 
+from starlette.middleware.cors import CORSMiddleware
+
 app = FastAPI()
+
+# CORS configuration to allow specific methods from certain origins
+origins = [
+    "http://localhost",  # Adjust according to your frontend URL
+    "http://localhost:8000",
+    "http://127.0.0.1:8000/pay/stripe",
+    "http://localhost:63342",
+    "http://127.0.0.1:8000/pay/stripe/confirm"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins (for testing; restrict in production)
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods (GET, POST, OPTIONS, etc.)
+    allow_headers=["*"],  # Allow all headers
+)
 
 # Database Connection
 DATABASE_URL = "sqlite:///./test.db"
@@ -22,10 +41,9 @@ class Payment(Base):
     id = Column(Integer, primary_key=True, index=True)
     amount = Column(Float)
     currency = Column(String, default="USD")
-    #payment_method = Column(String)
     provider = Column(String)
     payment_intent_id= Column(String) # user payment id
-
+    payment_method = Column(String)
 
 # Create Tables
 Base.metadata.create_all(bind=engine)
@@ -42,14 +60,15 @@ def get_db():
 class PaymentRequest(BaseModel):
     amount: float
     currency: str = "USD"
-    #payment_method: str
     provider: str  # Options: 'paypal', 'stripe', 'wechat', 'alipay'
     payment_intent_id: str # random user str
+    payment_method: str
 
 # 🌍 Home Route
 @app.get("/")
 async def home():
     return {"message": "Welcome to the Payment API"}
+
 
 # ✅ PayPal Payment
 @app.post("/pay/paypal")
@@ -76,6 +95,16 @@ async def pay_paypal(request: PaymentRequest, db: Session = Depends(get_db)):
         async with session.post(f"{PAYPAL_API_URL}/v2/checkout/orders", headers=headers, json=json_data) as response:
             return await response.json()
 
+# 🌍 /pay/stripe Route
+@app.get("/pay/stripe")
+async def home():
+    return {"message": "Welcome to the Payment /pay/stripe API"}
+
+
+@app.options("/pay/stripe")  # Handle preflight request
+async def options_handler():
+    return {"message": "OK"}
+
 # ✅ Stripe Payment
 @app.post("/pay/stripe")
 async def pay_stripe(request: PaymentRequest, db: Session = Depends(get_db)):
@@ -98,7 +127,8 @@ async def pay_stripe(request: PaymentRequest, db: Session = Depends(get_db)):
                     provider="Stripe",
                     amount=data["amount"],  # Example amount from the response
                     currency="USD",  # Example currency from the response
-                    payment_intent_id = ind["id"]  # payment_intent_id from Stripe response
+                    payment_intent_id = ind["id"],  # payment_intent_id from Stripe response
+                    payment_method = "pm_card_visa"  # payment_method from Stripe response
                 )
 
                 # Add the new payment to the database session and commit
@@ -106,6 +136,21 @@ async def pay_stripe(request: PaymentRequest, db: Session = Depends(get_db)):
                 db.commit()
                 db.refresh(new_payment)
 
+                # print(ind["id"], '\n')
+
+                # Create a PaymentIntent with the amount and currency provided
+                # payment_intent = stripe.PaymentIntent.create(
+                #     amount=data["amount"],  # Stripe expects amount in cents
+                #     currency="USD"
+                #     # payment_method_types=ind["payment_method_types"]
+                # )
+                #
+                # print(ind["id"], '\n')
+                #
+                # return JSONResponse(content={
+                #     "client_secret": payment_intent.client_secret,
+                #     "payment_intent_id": payment_intent.id
+                # })
                 return await response.json()
 
     except Exception as e:
